@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { v4 as uuid } from "uuid";
 import { DragDropContext, Droppable } from "react-beautiful-dnd";
+import axios from 'axios';
 
 import InputContainer from "../components/InputContainer";
 import List from "../components/List";
@@ -10,188 +11,177 @@ import StoreApi from "../utils/storeApi";
 
 import "./styles.scss";
 
-const dataStorage = JSON.parse(window.localStorage.getItem("dataKanban"));
-
-const initialState = () => {
-  if (dataStorage) {
-    return dataStorage;
-  } else {
-    window.localStorage.setItem("dataKanban", JSON.stringify(store));
-    return store;
-  }
-};
+const crmAPI = 'http://127.0.0.1:3336/v1';
+const headers = {
+  'Authorization': 'Bearer ' + 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJjbG9uZUlkIjoic3RhZ2luZ191c2VyX2luc3VyYW5jZV8xdVlONERBQyIsInVzZXJJZCI6IjM5MjExNDYxNTUiLCJlbWFpbCI6ImZ0aG9tcHNvbi5icm9rZXJAZGlnaW5leHQuYXUiLCJtb2JpbGVOdW1iZXIiOiIrNjEyMTIzNDU2NzgiLCJyb2xlIjoiYnV5ZXIiLCJjb21wYW55SWQiOjEsImJyYW5jaElkIjoxLCJzeXN0ZW1JZCI6InN0YWdpbmdfdXNlcl9pbnN1cmFuY2VfMXVZTjREQUMiLCJpYXQiOjE2NzkyODI4NTV9.TDhbHItDxdg2jGczMfvbbI_YrOjMyav-pgmmrsJHa5I'
+}
 
 export default function Home() {
-  const [data, setData] = useState(initialState);
+  const [data, setData] = useState([]);
 
-  const addMoreCard = (title, listId) => {
+  const fetchStages = async () => {
+    await axios.get(`${crmAPI}/kanban/stages/?stageType=tasks&includes[0]=cards`, { headers })
+    .then(res => {     
+      setData(() => res.data)
+    })
+    .catch(err => {
+      console.log(err);
+    })
+  }
+
+  React.useEffect(() => {
+    fetchStages()
+  }, [])
+
+  const addMoreCard = async (title, listId) => {
     if (!title) {
       return;
     }
 
-    const newCardId = uuid();
-    const newCard = {
-      id: newCardId,
+    await axios.post(`${crmAPI}/kanban/cards/stages/${listId}`, {
       title,
-    };
-
-    const list = data.lists[listId];
-    list.cards = [...list.cards, newCard];
-
-    const newState = {
-      ...data,
-      lists: {
-        ...data.lists,
-        [listId]: list,
-      },
-    };
-    setData(newState);
-    window.localStorage.setItem("dataKanban", JSON.stringify(newState));
-  };
-  const removeCard = (index, listId) => {
-    const list = data.lists[listId];
-
-    list.cards.splice(index, 1);
-
-    const newState = {
-      ...data,
-      lists: {
-        ...data.lists,
-        [listId]: list,
-      },
-    };
-    setData(newState);
-    window.localStorage.setItem("dataKanban", JSON.stringify(newState));
+      type: 'tasks',
+    }, { headers })
+    .then(() => fetchStages())
+    .catch(err => {
+      console.log(err);
+    })
   };
 
-  const updateCardTitle = (title, index, listId) => {
-    const list = data.lists[listId];
-    list.cards[index].title = title;
+  const removeCard = async (cardId) => {
+    const { id } = data.find(({ cards }) => {
+      return !!cards.find(card => card.id === cardId)
+    })
 
-    const newState = {
-      ...data,
-      lists: {
-        ...data.lists,
-        [listId]: list,
-      },
-    };
-    setData(newState);
-    window.localStorage.setItem("dataKanban", JSON.stringify(newState));
+    await axios.post(`${crmAPI}/kanban/cards/${id}`, { headers })
+    .then(() => fetchStages())
+    .catch(err => {
+      console.log(err);
+    }) 
   };
-  const addMoreList = (title) => {
+
+  const updateCardTitle = async (title, cardId) => {
+    const { id } = data.find(({ cards }) => {
+      return !!cards.find(card => card.id === cardId)
+    })
+    
+    await axios.put(`${crmAPI}/kanban/cards/${id}`, {
+        title,
+      }, { headers })
+      .then(() => fetchStages())
+      .catch(err => {
+        console.log(err);
+      })
+  };
+
+  const addMoreList = async (title) => {
     if (!title) {
       return;
     }
 
-    const newListId = uuid();
-    const newList = {
-      id: newListId,
+    await axios.post(`${crmAPI}/kanban/stages`, {
       title,
-      cards: [],
-    };
-    const newState = {
-      listIds: [...data.listIds, newListId],
-      lists: {
-        ...data.lists,
-        [newListId]: newList,
-      },
-    };
-    setData(newState);
-    window.localStorage.setItem("dataKanban", JSON.stringify(newState));
+      type: 'tasks',
+    }, { headers })
+    .then(() => fetchStages())
+    .catch(err => {
+      console.log(err);
+    })
+  }
+
+  const updateListTitle = async (title, listId) => {
+    const { id } = data.find(datum => datum.id === listId)
+
+    await axios.put(`${crmAPI}/kanban/stages/${id}`, {
+        title,
+      }, { headers })
+      .then(() => fetchStages())
+      .catch(err => {
+        console.log(err);
+      })
   };
 
-  const updateListTitle = (title, listId) => {
-    const list = data.lists[listId];
-    list.title = title;
+  const deleteList = async (listId) => {
+    const { id } = data.find(datum => datum.id === listId)
 
-    const newState = {
-      ...data,
-      lists: {
-        ...data.lists,
-        [listId]: list,
-      },
-    };
-
-    setData(newState);
-    window.localStorage.setItem("dataKanban", JSON.stringify(newState));
+    await axios.delete(`${crmAPI}/kanban/stages/${id}`, { headers })
+      .then(() => fetchStages())
+      .catch(err => {
+        console.log(err);
+      })
   };
 
-  const deleteList = (listId) => {
-    const lists = data.lists;
-    const listIds = data.listIds;
+  const onDragEnd = async (result) => {
+    const { 
+      destination, // Where the drag ended
+      source, // Where the drag started
+      draggableId, // Stringified index of the draggable 
+      type // List or Card 
+    } = result;
+    const tempData = [...data]
 
-    delete lists[listId];
-
-    listIds.splice(listIds.indexOf(listId), 1);
-
-    const newState = {
-      lists: lists,
-      listIds: listIds,
-    };
-
-    setData(newState);
-    window.localStorage.setItem("dataKanban", JSON.stringify(newState));
-  };
-
-  const onDragEnd = (result) => {
-    const { destination, source, draggableId, type } = result;
-
+    console.log(result)
     if (!destination) {
       return;
     }
 
+    // If moving a list
     if (type === "list") {
-      const newListIds = data.listIds;
+      const item = data[source.index]
 
-      newListIds.splice(source.index, 1);
-      newListIds.splice(destination.index, 0, draggableId);
+      tempData.splice(source.index, 1)
+      tempData.splice(destination.index, 0, item)
 
-      const newState = {
-        ...data,
-        listIds: newListIds,
-      };
-      setData(newState);
-      window.localStorage.setItem("dataKanban", JSON.stringify(newState));
+      const newOrder = tempData.map(({ order }, i) => `order[${order}]=${i}`).join('&')
 
-      return;
+      await axios.put(
+        `${crmAPI}/kanban/stages/reorder/tasks?${newOrder}`, 
+        null, 
+        { headers }
+      )
+      .then(() => fetchStages())
+      .catch(err => console.error(err))
+
+      return
     }
 
-    const sourceList = data.lists[source.droppableId];
-    const destinationList = data.lists[destination.droppableId];
-    const draggingCard = sourceList.cards.filter(
-      (card) => card.id === draggableId
-    )[0];
+    const sourceList = tempData.filter(({ id }) => id === Number(source.droppableId))?.[0]
+    const cardsList = [ ...sourceList.cards ]
+    const destinationList = tempData.filter(({ id }) => id === Number(destination.droppableId))?.[0]
+    const draggedCard = cardsList[source.index]
 
+    // ---------- If dragging a card ------------
+
+    // If dragged a card inside the source list
     if (source.droppableId === destination.droppableId) {
+      console.log('here 1')
       sourceList.cards.splice(source.index, 1);
-      destinationList.cards.splice(destination.index, 0, draggingCard);
+      sourceList.cards.splice(destination.index, 0, draggedCard);
 
-      const newState = {
-        ...data,
-        lists: {
-          ...data.lists,
-          [sourceList.id]: destinationList,
-        },
-      };
-      setData(newState);
-      window.localStorage.setItem("dataKanban", JSON.stringify(newState));
-    } else {
+      const newOrder = sourceList.cards.map(({ order }, i) => `order[${order}]=${i}`).join('&')
+
+      return await axios.put(
+        `${crmAPI}/kanban/cards/reorder/${sourceList.id}?${newOrder}`, 
+        null, 
+        { headers }
+      )
+      .then(() => fetchStages())
+      .catch(err => console.error(err))
+    } else { // If dragged a card outside the source list
+      console.log('here 2')
       sourceList.cards.splice(source.index, 1);
-      destinationList.cards.splice(destination.index, 0, draggingCard);
+      destinationList.cards.splice(destination.index, 0, draggedCard);
 
-      const newState = {
-        ...data,
-        lists: {
-          ...data.lists,
-          [sourceList.id]: sourceList,
-          [destinationList.id]: destinationList,
-        },
-      };
-
-      setData(newState);
-      window.localStorage.setItem("dataKanban", JSON.stringify(newState));
+      return await axios.put(
+        `${crmAPI}/kanban/cards/transfer-card/stages/${destinationList.id}/cards/${draggedCard.id}/order/${destination.index}`, 
+        null, 
+        { headers }
+      )
+      .then(() => fetchStages())
+      .catch(err => console.error(err))
     }
   };
+
   return (
     <StoreApi.Provider
       value={{
@@ -211,10 +201,8 @@ export default function Home() {
               ref={provided.innerRef}
               {...provided.droppableProps}
             >
-              {data.listIds.map((listId, index) => {
-                const list = data.lists[listId];
-
-                return <List list={list} key={listId} index={index} />;
+              {data?.map?.((datum, index) => {
+                return <List list={datum} key={datum.id} index={index} />;
               })}
               <div>
                 <InputContainer type="list" />
